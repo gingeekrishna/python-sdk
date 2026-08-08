@@ -13,6 +13,9 @@ from dirty_equals import IsPartialDict
 from mcp_types import CallToolResult, InputRequiredResult
 from pydantic import BaseModel, Field
 
+from typing_extensions import NotRequired
+from typing_extensions import TypedDict as ExtTypedDict
+
 from mcp.server.mcpserver.exceptions import InvalidSignature
 from mcp.server.mcpserver.utilities.func_metadata import func_metadata
 
@@ -808,6 +811,37 @@ def test_structured_output_typeddict():
         },
         "required": ["name", "age", "email"],
         "title": "PersonTypedDictRequired",
+    }
+
+
+def test_structured_output_typeddict_notrequired():
+    """NotRequired fields in a TypedDict must not raise PydanticForbiddenQualifier on Python 3.10.
+
+    typing.get_type_hints() only strips Required/NotRequired qualifiers from 3.11 onwards;
+    below that it leaves NotRequired[T] intact, and pydantic rejects the bare qualifier when
+    create_model() sees it. typing_extensions.get_type_hints() strips the qualifier on every
+    supported version.
+
+    Use typing_extensions.TypedDict (not typing.TypedDict) when combining with NotRequired so
+    that pydantic can introspect the class on all interpreter versions.
+    """
+
+    class PersonWithOptional(ExtTypedDict):
+        name: str
+        age: NotRequired[int]
+
+    def get_person() -> PersonWithOptional:  # pragma: no cover
+        return {"name": "Dave"}
+
+    meta = func_metadata(get_person)
+    assert meta.output_schema == {
+        "type": "object",
+        "properties": {
+            "name": {"title": "Name", "type": "string"},
+            "age": {"title": "Age", "type": "integer", "default": None},
+        },
+        "required": ["name"],
+        "title": "PersonWithOptional",
     }
 
 
